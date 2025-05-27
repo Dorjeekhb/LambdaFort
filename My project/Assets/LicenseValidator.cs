@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.Networking;
 using System.Collections;
+using System.Text;
+using System.Security.Cryptography;
 
 public class LicenseValidator : MonoBehaviour
 {
@@ -16,12 +18,20 @@ public class LicenseValidator : MonoBehaviour
     IEnumerator ValidarLicencia()
     {
         string deviceId = SystemInfo.deviceUniqueIdentifier;
-        Debug.Log("🆔 Mi deviceId es: " + deviceId);
+        string clave = ObtenerClave();
+        string firma = CalcularHMAC(deviceId, clave);
 
-        string jsonBody = JsonUtility.ToJson(new DeviceIdWrapper { deviceId = deviceId });
+        Debug.Log("🆔 DeviceID: " + deviceId);
+        Debug.Log("🔐 Firma: " + firma);
+
+        string jsonBody = JsonUtility.ToJson(new PeticionLicencia
+        {
+            deviceId = deviceId,
+            firma = firma
+        });
 
         UnityWebRequest request = new UnityWebRequest(endpoint, "POST");
-        byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonBody);
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -33,24 +43,19 @@ public class LicenseValidator : MonoBehaviour
             string response = request.downloadHandler.text;
             Debug.Log("📩 Respuesta: " + response);
 
-            if (response.Contains("true"))
+            if (response.Contains("\"valid\": true"))
             {
-                Debug.Log("✅ Licencia valida. Acceso concedido.");
-                mensajeUI.SetActive(true);
+                Debug.Log("✅ Licencia válida. Acceso concedido.");
+                mensajeUI?.SetActive(true);
                 yield return new WaitForSeconds(1f);
-                mensajeUI.SetActive(false);
+                mensajeUI?.SetActive(false);
             }
             else
             {
-                Debug.LogWarning("❌ Licencia no valida. Cerrando el juego.");
-                if (invalidLicenseUI != null)
-                {
-                    invalidLicenseUI.SetActive(true);
-                }
+                Debug.LogWarning("❌ Licencia no válida. Cerrando el juego.");
+                invalidLicenseUI?.SetActive(true);
                 yield return new WaitForSeconds(3f);
                 Application.Quit();
-
-                // Esto es solo para asegurarse en editor
 #if UNITY_EDITOR
                 UnityEditor.EditorApplication.isPlaying = false;
 #endif
@@ -62,9 +67,25 @@ public class LicenseValidator : MonoBehaviour
         }
     }
 
+    static string[] clavePartes = { "3xA!", "zFh9", "2@7#", "LmPn", "2025", "_sec", "ure_", "key" };
+    static string ObtenerClave() => string.Join("", clavePartes);
+
+    static string CalcularHMAC(string mensaje, string clave)
+    {
+        using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(clave)))
+        {
+            byte[] hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(mensaje));
+            StringBuilder sb = new StringBuilder();
+            foreach (byte b in hash)
+                sb.Append(b.ToString("x2"));
+            return sb.ToString();
+        }
+    }
+
     [System.Serializable]
-    public class DeviceIdWrapper
+    public class PeticionLicencia
     {
         public string deviceId;
+        public string firma;
     }
 }
