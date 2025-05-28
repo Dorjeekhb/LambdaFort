@@ -1,48 +1,38 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Activar licencia - LambdaFort</title>
+  <title>Registro de Licencia</title>
 </head>
 <body>
-  <h1>Registrar nueva licencia</h1>
-  <p>Tu IP se detecta automáticamente y será usada para registrar tu licencia.</p>
-
-  <form id="formulario">
-    <label for="deviceId">Device ID:</label>
-    <input type="text" id="deviceId" name="deviceId" required>
-    <br>
-    <button type="submit">Registrar licencia</button>
-  </form>
-
-  <pre id="resultado"></pre>
+  <h2>Registrar licencia automáticamente</h2>
+  <button onclick="registrarLicencia()">Solicitar Licencia</button>
+  <p id="estado"></p>
 
   <script>
-    async function calcularHMAC(mensaje, clave) {
-      const enc = new TextEncoder();
+    async function registrarLicencia() {
+      const deviceId = crypto.randomUUID(); // O usa algo persistente en localStorage
+      const clave = "3xA!zFh92@7#LmPn2025_secure_key";
+      
+      const encoder = new TextEncoder();
+      const keyData = encoder.encode(clave);
+      const msgData = encoder.encode(deviceId);
+
       const key = await crypto.subtle.importKey(
-        'raw', enc.encode(clave), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+        "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
       );
-      const firma = await crypto.subtle.sign('HMAC', key, enc.encode(mensaje));
-      return [...new Uint8Array(firma)].map(b => b.toString(16).padStart(2, '0')).join('');
-    }
+      const signature = await crypto.subtle.sign("HMAC", key, msgData);
+      const firmaHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 
-    document.getElementById('formulario').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const deviceId = document.getElementById('deviceId').value;
-      const clave = '3xA!zFh92@7#LmPn2025_secure_key';
-      const firma = await calcularHMAC(deviceId, clave);
-
-      const respuesta = await fetch('https://v3cfc9fokf.execute-api.eu-north-1.amazonaws.com/ValidateRegisterLicense', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId, firma })
+      const res = await fetch("https://v3cfc9fokf.execute-api.eu-north-1.amazonaws.com/ValidateRegisterLicense", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, firma: firmaHex })
       });
 
-      const resultado = await respuesta.json();
-      document.getElementById('resultado').textContent = JSON.stringify(resultado, null, 2);
-    });
+      const data = await res.json();
+      document.getElementById("estado").innerText = `✔ ${data.reason}`;
+    }
   </script>
 </body>
 </html>
