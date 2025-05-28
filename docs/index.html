@@ -1,37 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Registro de Licencia</title>
+  <title>Solicitar Licencia - LambdaFort</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 5em; }
+    input, button { padding: 10px; font-size: 1em; }
+    #resultado { margin-top: 20px; font-size: 1.2em; }
+  </style>
 </head>
 <body>
-  <h2>Registrar licencia automáticamente</h2>
-  <button onclick="registrarLicencia()">Solicitar Licencia</button>
-  <p id="estado"></p>
+  <h1>Solicitar Licencia</h1>
+
+  <input id="deviceId" placeholder="Introduce tu Device ID" size="40">
+  <br><br>
+  <button onclick="solicitarLicencia()">Validar Licencia</button>
+
+  <div id="resultado"></div>
 
   <script>
-    async function registrarLicencia() {
-      const deviceId = crypto.randomUUID(); // O usa algo persistente en localStorage
-      const clave = "3xA!zFh92@7#LmPn2025_secure_key";
-      
+    const CLAVE = "3xA!zFh92@7#LmPn2025_secure_key";
+
+    async function solicitarLicencia() {
+      const deviceId = document.getElementById("deviceId").value.trim();
+      if (!deviceId) {
+        document.getElementById("resultado").textContent = "❗ Introduce un Device ID.";
+        return;
+      }
+
       const encoder = new TextEncoder();
-      const keyData = encoder.encode(clave);
+      const keyData = encoder.encode(CLAVE);
       const msgData = encoder.encode(deviceId);
 
-      const key = await crypto.subtle.importKey(
+      const cryptoKey = await crypto.subtle.importKey(
         "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
       );
-      const signature = await crypto.subtle.sign("HMAC", key, msgData);
-      const firmaHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 
-      const res = await fetch("https://v3cfc9fokf.execute-api.eu-north-1.amazonaws.com/ValidateRegisterLicense", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, firma: firmaHex })
-      });
+      const signature = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
+      const hexFirma = Array.from(new Uint8Array(signature))
+        .map(b => b.toString(16).padStart(2, "0")).join("");
 
-      const data = await res.json();
-      document.getElementById("estado").innerText = `✔ ${data.reason}`;
+      const body = {
+        deviceId: deviceId,
+        firma: hexFirma
+      };
+
+      try {
+        const res = await fetch("https://eutt6vny9h.execute-api.eu-north-1.amazonaws.com/prod/licencia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        const json = await res.json();
+
+        if (json.valid) {
+          document.getElementById("resultado").textContent = `✅ Licencia válida: ${json.reason}`;
+        } else {
+          document.getElementById("resultado").textContent = `❌ No válida: ${json.reason}`;
+        }
+
+      } catch (e) {
+        document.getElementById("resultado").textContent = "⚠️ Error al conectar con la API.";
+      }
     }
   </script>
 </body>
