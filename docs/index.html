@@ -2,13 +2,47 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Registro de Licencia</title>
-  <script src="register.js" defer></script>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activar licencia - LambdaFort</title>
 </head>
 <body>
-  <h1>Activar mi Licencia</h1>
-  <p id="status">Comprobando IP y país...</p>
-  <button id="registerBtn">Registrar licencia</button>
+  <h1>Registrar nueva licencia</h1>
+  <p>Tu IP se detecta automáticamente y será usada para registrar tu licencia.</p>
+
+  <form id="formulario">
+    <label for="deviceId">Device ID:</label>
+    <input type="text" id="deviceId" name="deviceId" required>
+    <br>
+    <button type="submit">Registrar licencia</button>
+  </form>
+
+  <pre id="resultado"></pre>
+
+  <script>
+    async function calcularHMAC(mensaje, clave) {
+      const enc = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        'raw', enc.encode(clave), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      );
+      const firma = await crypto.subtle.sign('HMAC', key, enc.encode(mensaje));
+      return [...new Uint8Array(firma)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    document.getElementById('formulario').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const deviceId = document.getElementById('deviceId').value;
+      const clave = '3xA!zFh92@7#LmPn2025_secure_key';
+      const firma = await calcularHMAC(deviceId, clave);
+
+      const respuesta = await fetch('https://v3cfc9fokf.execute-api.eu-north-1.amazonaws.com/ValidateRegisterLicense', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, firma })
+      });
+
+      const resultado = await respuesta.json();
+      document.getElementById('resultado').textContent = JSON.stringify(resultado, null, 2);
+    });
+  </script>
 </body>
 </html>
