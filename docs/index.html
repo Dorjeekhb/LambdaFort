@@ -1,67 +1,54 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Solicitar Licencia - LambdaFort</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solicitar Licencia</title>
   <style>
-    body { font-family: sans-serif; text-align: center; margin-top: 5em; }
-    input, button { padding: 10px; font-size: 1em; }
-    #resultado { margin-top: 20px; font-size: 1.2em; }
+    body { font-family: sans-serif; padding: 2rem; }
+    #estado { margin-top: 1rem; font-weight: bold; }
   </style>
 </head>
 <body>
   <h1>Solicitar Licencia</h1>
-
-  <input id="deviceId" placeholder="Introduce tu Device ID" size="40">
-  <br><br>
   <button onclick="solicitarLicencia()">Validar Licencia</button>
-
-  <div id="resultado"></div>
+  <p id="estado">Esperando acción...</p>
 
   <script>
-    const CLAVE = "3xA!zFh92@7#LmPn2025_secure_key";
-
     async function solicitarLicencia() {
-      const deviceId = document.getElementById("deviceId").value.trim();
-      if (!deviceId) {
-        document.getElementById("resultado").textContent = "❗ Introduce un Device ID.";
-        return;
-      }
-
-      const encoder = new TextEncoder();
-      const keyData = encoder.encode(CLAVE);
-      const msgData = encoder.encode(deviceId);
-
-      const cryptoKey = await crypto.subtle.importKey(
-        "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-      );
-
-      const signature = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
-      const hexFirma = Array.from(new Uint8Array(signature))
-        .map(b => b.toString(16).padStart(2, "0")).join("");
-
-      const body = {
-        deviceId: deviceId,
-        firma: hexFirma
-      };
+      const estado = document.getElementById("estado");
+      estado.textContent = "🔄 Solicitando...";
 
       try {
-        const res = await fetch("https://eutt6vny9h.execute-api.eu-north-1.amazonaws.com/prod/licencia", {
+        // Obtener IP del cliente
+        const ipData = await fetch("https://api64.ipify.org?format=json").then(res => res.json());
+        const deviceId = btoa(ipData.ip + "-web-client" + Math.random().toString(36).slice(2, 6));
+
+        // Generar firma (desde frontend solo con hash inseguro, en prod esto debería hacerse en backend)
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode("3xA!zFh92@7#LmPn2025_secure_key");
+        const msgData = encoder.encode(deviceId);
+        const cryptoKey = await crypto.subtle.importKey(
+          "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+        );
+        const sig = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
+        const firma = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+
+        // Enviar a Lambda
+        const respuesta = await fetch("https://eutt6vny9h.execute-api.eu-north-1.amazonaws.com/prod/licencia", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body)
+          body: JSON.stringify({ deviceId, firma })
         });
 
-        const json = await res.json();
-
-        if (json.valid) {
-          document.getElementById("resultado").textContent = `✅ Licencia válida: ${json.reason}`;
+        const data = await respuesta.json();
+        if (data.valid) {
+          estado.textContent = "✅ Licencia aceptada";
         } else {
-          document.getElementById("resultado").textContent = `❌ No válida: ${json.reason}`;
+          estado.textContent = "❌ Rechazada: " + data.reason;
         }
-
-      } catch (e) {
-        document.getElementById("resultado").textContent = "⚠️ Error al conectar con la API.";
+      } catch (err) {
+        estado.textContent = "⚠️ Error al conectar: " + err.message;
       }
     }
   </script>
